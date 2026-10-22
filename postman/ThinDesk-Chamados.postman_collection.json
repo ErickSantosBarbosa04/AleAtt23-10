@@ -1,0 +1,192 @@
+{
+  "info": {
+    "name": "ThinDesk - Chamados",
+    "description": "Fluxo da API de chamados. Envie primeiro a requisição Entrar; o Postman guarda o cookie de sessão do login existente. O nome de usuário autenticado é registrado como solicitante e é usado no endpoint /usuario/{id}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "username", "value": "admin" },
+    { "key": "password", "value": "thindesk" },
+    { "key": "chamadoId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Entrar",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "username", "value": "{{username}}", "type": "text" },
+            { "key": "password", "value": "{{password}}", "type": "text" }
+          ]
+        },
+        "url": "{{baseUrl}}/login",
+        "description": "Autentica com o login já existente no ThinDesk. O cookie JSESSIONID é reutilizado pelas próximas requisições."
+      }
+    },
+    {
+      "name": "2. Abrir chamado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Chamado aberto e persistido', function () {",
+              "    pm.response.to.have.status(201);",
+              "    const chamado = pm.response.json();",
+              "    pm.expect(chamado.status).to.eql('ABERTO');",
+              "    pm.expect(chamado.solicitante).to.eql(pm.collectionVariables.get('username'));",
+              "    pm.expect(chamado.dataAbertura).to.be.a('string');",
+              "    pm.collectionVariables.set('chamadoId', chamado.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"titulo\": \"Computador sem acesso à rede\",\n  \"descricao\": \"A estação do setor financeiro não consegue acessar a rede.\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/chamados",
+        "description": "O solicitante, a data de abertura e o status são definidos pelo serviço."
+      }
+    },
+    {
+      "name": "3. Listar chamados do usuário",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Chamado aparece na lista persistida do solicitante', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const chamados = pm.response.json();",
+              "    pm.expect(chamados.some(chamado => chamado.id === pm.collectionVariables.get('chamadoId'))).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/chamados/usuario/{{username}}"
+      }
+    },
+    {
+      "name": "4. Consultar chamado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Detalhes do chamado aberto estão persistidos', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const chamado = pm.response.json();",
+              "    pm.expect(chamado.id).to.eql(pm.collectionVariables.get('chamadoId'));",
+              "    pm.expect(chamado.status).to.eql('ABERTO');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/chamados/{{chamadoId}}"
+      }
+    },
+    {
+      "name": "5. Resolver chamado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Chamado resolvido com solução e data', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const chamado = pm.response.json();",
+              "    pm.expect(chamado.status).to.eql('RESOLVIDO');",
+              "    pm.expect(chamado.solucao).to.be.a('string').and.not.empty;",
+              "    pm.expect(chamado.tecnico).to.eql(pm.collectionVariables.get('username'));",
+              "    pm.expect(chamado.dataResolucao).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"solucao\": \"Reiniciada a interface de rede e validado o acesso.\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/chamados/{{chamadoId}}/resolver"
+      }
+    },
+    {
+      "name": "6. Confirmar resolução persistida",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('A consulta retorna o estado salvo no MongoDB', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const chamado = pm.response.json();",
+              "    pm.expect(chamado.status).to.eql('RESOLVIDO');",
+              "    pm.expect(chamado.solucao).to.eql('Reiniciada a interface de rede e validado o acesso.');",
+              "    pm.expect(chamado.dataResolucao).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/chamados/{{chamadoId}}"
+      }
+    },
+    {
+      "name": "7. Bloquear nova resolução",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Chamado resolvido não pode ser alterado novamente', function () {",
+              "    pm.response.to.have.status(409);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"solucao\": \"Tentativa de alterar após resolução.\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/chamados/{{chamadoId}}/resolver"
+      }
+    }
+  ]
+}
